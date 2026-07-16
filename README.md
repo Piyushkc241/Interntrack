@@ -124,9 +124,3 @@ Just make sure these are installed — nothing here conflicts with typical start
 ```bash
 npm install bcryptjs jsonwebtoken multer resend
 ```
-
-## What's still open (be upfront about this before Infosys)
-
-- No automated test suite — everything was verified manually via curl in this session, matching how you've been testing so far.
-- No pagination UI on Resumes/Reminders yet (Applications has it — same pattern extends easily).
-- No deployment config (Render/Vercel) yet — both apps run on standard `npm start` / `vite build`, so they drop in with minimal setup when you're ready.
