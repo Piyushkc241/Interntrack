@@ -1,126 +1,104 @@
-# InternTrack
+# InternTrack — Internship & Placement Tracker
 
-Full-stack Internship & Placement Tracker, built inside your existing project
-structure and naming conventions (`Backend/src/config/db.js` with
-`DB_HOST`/`DB_USER`/etc., `userControllers.js`-style controller names,
-`services/` for query logic).
+A full-stack web application to track internship and job applications, manage resumes, set deadline reminders, and visualize your placement progress from a single dashboard.
 
-**Everything below has actually been run in this environment** — not just
-written: dependencies installed, a real PostgreSQL database created, the
-schema applied, the server started, and every endpoint hit with curl,
-including auth, hashing, joins, search, pagination, file upload/download,
-cross-user isolation, and the reminder-email checker. The frontend was
-built with `vite build` and produced zero errors. You still need to run it
-yourself to see it in your browser, but nothing here is untested guesswork.
+## Features
 
-## What was fixed in your existing code
+- 🔐 **Authentication** — JWT-based auth with bcrypt password hashing
+- 📋 **Application Tracking** — Full CRUD with status pipeline (applied → interview → offer / rejected)
+- 🔍 **Search & Filter** — Search by company/role, filter by status, sort, and paginate
+- 📄 **Resume Management** — Upload, download, and link resumes to specific applications
+- ⏰ **Reminders** — Track upcoming deadlines and interviews, with optional automated email notifications
+- 📊 **Analytics Dashboard** — Visual breakdown of application status and activity over time
+- 🔒 **Per-user data isolation** — Every request is scoped to the authenticated user
 
-- **`postUsers` stored plaintext passwords.** Now hashed with `bcryptjs` before the `INSERT`, and the hash is never included in any API response.
-- **`postUsers` returned status `501`** (Not Implemented — the wrong code for a caught error) — now `500`.
-- **`getUserById` was just a `console.log`** — now actually queries and returns the user, or `404` if not found.
-- **`GET /users` had no auth** — anyone could list every registered user's name, email, and phone. Now requires a valid token.
+## Tech Stack
 
-## What's new
+**Frontend:** React, Vite, Tailwind CSS, React Router, Recharts, Axios
+**Backend:** Node.js, Express.js, PostgreSQL
+**Auth:** JWT, bcryptjs
+**File Uploads:** Multer
+**Email:** Resend API
 
-- **Login** (`POST /users/login`) — verifies the hash, returns a JWT.
-- **Applications, Resumes, Reminders, Stats** — full CRUD, all scoped to the logged-in user via a `requireAuth` middleware that reads the JWT and sets `req.userId`. Tested specifically: **User B gets a 404, not User A's data**, on every read/update/delete of User A's rows.
-- **Reminder emails (optional)** — see below.
-- **React frontend** — Home (public landing), Login, Register, Dashboard (stats + charts), Applications, Resumes, Reminders — built into your existing `frontend/src/{components,hooks,pages,services}` folders.
+## Project Structure
+INTERNTRACK/
+├── Backend/
+│   ├── server.js
+│   └── src/
+│       ├── config/         # DB connection, Multer, Resend client
+│       ├── controllers/    # Request/response handling
+│       ├── services/       # Business logic and SQL queries
+│       ├── middleware/     # Auth guard, request logger
+│       ├── routes/         # API route definitions
+│       ├── models/         # Shared constants
+│       └── db/             # Schema and migration script
+└── frontend/
+└── src/
+├── pages/          # Route-level views
+├── components/     # Reusable UI components
+├── hooks/          # Auth context and hook
+└── services/       # API client
+## API Overview
 
-## Files I wrote fresh (you never showed me the originals)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/users` | Register a new user |
+| POST | `/users/login` | Log in, returns JWT |
+| GET | `/users/:id` | Get user profile *(auth)* |
+| GET | `/applications` | List applications — supports search, filter, sort, pagination *(auth)* |
+| POST | `/applications` | Create an application *(auth)* |
+| PUT | `/applications/:id` | Update an application *(auth)* |
+| DELETE | `/applications/:id` | Delete an application *(auth)* |
+| GET | `/resumes` | List resumes *(auth)* |
+| POST | `/resumes` | Upload a resume *(auth)* |
+| GET | `/resumes/:id/download` | Download a resume *(auth)* |
+| GET | `/reminders` | List reminders *(auth)* |
+| POST | `/reminders` | Create a reminder *(auth)* |
+| GET | `/stats/overview` | Dashboard statistics *(auth)* |
 
-Everything above was built directly from the code you pasted. These four
-files didn't exist in what you showed me, so I wrote reasonable versions —
-worth a quick look in case you already had something different for them:
+All protected routes require `Authorization: Bearer <token>` and are scoped to the authenticated user.
 
-- `Backend/src/routes/health.js` — assumed `GET /health` returning `{status:"ok"}`
-- `Backend/src/middleware/logger.js` — a one-line request logger (method + URL + timestamp); it exists but wasn't wired into `app.js` in what you showed me, so I added `app.use(logger)`
-- `Backend/package.json` — full dependency list; if you already have one, just add whatever's missing (see below) rather than overwrite
-- `frontend/src/pages/Home.jsx` — was an empty Day-5 placeholder; now a public landing page
+## Getting Started
 
-## Setup
+### Prerequisites
+- Node.js (v18+)
+- PostgreSQL
 
-**1. Database** (you've already got this working):
-```bash
-createdb -U postgres interntrack
-```
+### Backend
 
-**2. Backend**
 ```bash
 cd Backend
-cp .env.example .env     # fill in DB_PASSWORD, JWT_SECRET — see note on # below
+cp .env.example .env    # configure your database credentials
 npm install
-npm run db:init
-npm run dev               # http://localhost:5000
+npm run db:init         # applies the schema
+npm run dev              # starts on http://localhost:5000
 ```
 
-> If your password contains `#`, `@`, or spaces, wrap it in quotes in `.env`:
-> `DB_PASSWORD="piyush#241"` — otherwise `dotenv` truncates it at the `#`. (This bit you before — it's fixed by quoting, not by changing the password.)
+### Frontend
 
-**3. Frontend**
 ```bash
 cd frontend
 cp .env.example .env
 npm install
-npm run dev                # http://localhost:5173
+npm run dev              # starts on http://localhost:5173
 ```
 
-Open `http://localhost:5173`, hit "Get started," register, and you're in.
+## Environment Variables
 
-## Reminder emails — optional, needs a free API key
+**Backend `.env`**
 
-Reminders work fully without this — you can create, view, and delete them.
-This only controls whether an **email actually gets sent** when a reminder's
-time arrives (checked every 5 minutes in the background).
+| Variable | Description |
+|----------|-------------|
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
+| `JWT_SECRET` | Secret used to sign auth tokens |
+| `RESEND_API_KEY` | *(optional)* Enables email reminders via [Resend](https://resend.com) |
 
-1. Sign up free at **[resend.com](https://resend.com)** (no credit card, 3,000 emails/month free)
-2. Create an API key in their dashboard
-3. In `Backend/.env`, set:
-   ```
-   RESEND_API_KEY=re_your_key_here
-   ```
-4. Restart the backend.
+**Frontend `.env`**
 
-Without a key, you'll just see this in the server log — the app keeps working normally:
-```
-RESEND_API_KEY not set — reminder emails are disabled (app still works fine).
-```
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_BASE_URL` | Backend API base URL |
 
-## API reference
+## License
 
-All routes except `POST /users` (register) and `POST /users/login` require
-`Authorization: Bearer <token>`.
-
-```
-POST   /users                          { name, email, phone?, password }
-POST   /users/login                    { email, password }
-GET    /users                          (auth) list all users
-GET    /users/:id                      (auth)
-
-GET    /applications                   ?status=&search=&sortBy=&order=&page=&limit=
-GET    /applications/:id
-POST   /applications                   { company, role, status?, dateApplied?, notes?, resumeId? }
-PUT    /applications/:id
-DELETE /applications/:id
-
-GET    /resumes
-POST   /resumes                        multipart/form-data: resume (file), label
-GET    /resumes/:id/download
-DELETE /resumes/:id
-
-GET    /reminders                      ?upcoming=true
-POST   /reminders                      { title, remindAt, notes?, applicationId? }
-PUT    /reminders/:id
-DELETE /reminders/:id
-
-GET    /stats/overview
-```
-
-`search` does `ILIKE` on company/role. `sortBy` accepts `created_at | date_applied | company | status`.
-
-## If your `Backend/package.json` already exists
-
-Just make sure these are installed — nothing here conflicts with typical starter deps:
-```bash
-npm install bcryptjs jsonwebtoken multer resend
-```
+This project is open source and available under the [MIT License](LICENSE).
