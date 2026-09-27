@@ -3,6 +3,22 @@ const { APPLICATION_STATUSES } = require("../models/applicationStatus");
 
 const VALID_SORT_COLUMNS = ["created_at", "date_applied", "company", "status"];
 
+// A resumeId is just a number the client can send — without checking it
+// actually belongs to this user, someone could attach their application to
+// another user's resume by guessing/incrementing an id, and then see that
+// resume's label leak through the `LEFT JOIN resumes` in list()/getById().
+async function assertResumeOwnership(userId, resumeId) {
+  const result = await pool.query("SELECT id FROM resumes WHERE id = $1 AND user_id = $2", [
+    resumeId,
+    userId,
+  ]);
+  if (result.rowCount === 0) {
+    const err = new Error("resumeId does not belong to this user");
+    err.status = 400;
+    throw err;
+  }
+}
+
 async function list(userId, { status, search, sortBy, order, page, limit }) {
   const conditions = ["a.user_id = $1"];
   const params = [userId];
@@ -68,6 +84,10 @@ async function getById(userId, applicationId) {
 async function create(userId, { company, role, status, dateApplied, notes, resumeId }) {
   const safeStatus = APPLICATION_STATUSES.includes(status) ? status : "applied";
 
+  if (resumeId) {
+    await assertResumeOwnership(userId, resumeId);
+  }
+
   const result = await pool.query(
     `INSERT INTO applications (user_id, company, role, status, date_applied, notes, resume_id)
      VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7)
@@ -91,6 +111,12 @@ async function update(userId, applicationId, fields) {
     const err = new Error(`status must be one of: ${APPLICATION_STATUSES.join(", ")}`);
     err.status = 400;
     throw err;
+  }
+
+  // `resume_id` can legitimately be set to null (unlinking a resume) — only
+  // check ownership when it's actually pointing at a resume.
+  if (fields.resume_id) {
+    await assertResumeOwnership(userId, fields.resume_id);
   }
 
   const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(", ");

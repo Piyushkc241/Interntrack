@@ -1,18 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api from "../services/api";
 import Navbar from "../components/Navbar";
 import ReminderForm from "../components/ReminderForm";
 
 export default function Reminders() {
   const [reminders, setReminders] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
   const [applications, setApplications] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  function fetchReminders() {
-    api.get("/reminders").then(({ data }) => setReminders(data)).catch(() => setError("Could not load reminders."));
-  }
+  const fetchReminders = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/reminders", { params: { page, limit: 8 } });
+      setReminders(data.data);
+      setPagination(data.pagination);
+    } catch (err) {
+      setError("Could not load reminders.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(fetchReminders, []);
+  useEffect(() => {
+    fetchReminders(1);
+  }, [fetchReminders]);
 
   useEffect(() => {
     api.get("/applications", { params: { limit: 100 } }).then(({ data }) => setApplications(data.data)).catch(() => {});
@@ -20,13 +33,15 @@ export default function Reminders() {
 
   async function handleCreate(payload) {
     await api.post("/reminders", payload);
-    fetchReminders();
+    // A new reminder should be visible right away — jump back to page 1
+    // rather than staying on whatever page was being viewed.
+    fetchReminders(1);
   }
 
   async function handleDelete(reminder) {
     if (!window.confirm(`Delete "${reminder.title}"?`)) return;
     await api.delete(`/reminders/${reminder.id}`);
-    fetchReminders();
+    fetchReminders(pagination.page);
   }
 
   const now = new Date();
@@ -46,32 +61,58 @@ export default function Reminders() {
         {error && <p className="mt-4 text-sm text-status-rejected">{error}</p>}
 
         <div className="mt-6 space-y-3">
-          {reminders.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">
-              No reminders yet. Add one above.
-            </div>
-          )}
-          {reminders.map((reminder) => {
-            const isPast = new Date(reminder.remind_at) < now;
-            return (
-              <div key={reminder.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div>
-                  <p className="font-medium text-ink">{reminder.title}</p>
-                  <p className={`text-sm ${isPast ? "text-slate-400" : "text-brand-600"}`}>
-                    {new Date(reminder.remind_at).toLocaleString()}
-                  </p>
-                  {reminder.company && (
-                    <p className="mt-1 text-sm text-slate-500">Linked to {reminder.company} — {reminder.role}</p>
-                  )}
-                  {reminder.notes && <p className="mt-1 text-sm text-slate-500">{reminder.notes}</p>}
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : (
+            <>
+              {reminders.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">
+                  No reminders yet. Add one above.
                 </div>
-                <button onClick={() => handleDelete(reminder)} className="text-sm font-medium text-status-rejected hover:opacity-80">
-                  Delete
-                </button>
-              </div>
-            );
-          })}
+              )}
+              {reminders.map((reminder) => {
+                const isPast = new Date(reminder.remind_at) < now;
+                return (
+                  <div key={reminder.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div>
+                      <p className="font-medium text-ink">{reminder.title}</p>
+                      <p className={`text-sm ${isPast ? "text-slate-400" : "text-brand-600"}`}>
+                        {new Date(reminder.remind_at).toLocaleString()}
+                      </p>
+                      {reminder.company && (
+                        <p className="mt-1 text-sm text-slate-500">Linked to {reminder.company} — {reminder.role}</p>
+                      )}
+                      {reminder.notes && <p className="mt-1 text-sm text-slate-500">{reminder.notes}</p>}
+                    </div>
+                    <button onClick={() => handleDelete(reminder)} className="text-sm font-medium text-status-rejected hover:opacity-80">
+                      Delete
+                    </button>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
+
+        {pagination.totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              disabled={pagination.page <= 1}
+              onClick={() => fetchReminders(pagination.page - 1)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-slate-500">Page {pagination.page} of {pagination.totalPages}</span>
+            <button
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => fetchReminders(pagination.page + 1)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

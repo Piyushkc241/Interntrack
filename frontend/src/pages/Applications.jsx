@@ -40,7 +40,9 @@ export default function Applications() {
   }, [fetchApplications]);
 
   useEffect(() => {
-    api.get("/resumes").then(({ data }) => setResumes(data)).catch(() => {});
+    // A dropdown needs every resume, not a paginated slice — request a high
+    // limit and unwrap the paginated { data, pagination } shape.
+    api.get("/resumes", { params: { limit: 100 } }).then(({ data }) => setResumes(data.data)).catch(() => {});
   }, []);
 
   async function handleCreate(payload) {
