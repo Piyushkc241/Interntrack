@@ -1,24 +1,25 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
-const uploadDir = path.join(__dirname, "..", "uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-  },
-});
+// Files are held in memory only, then streamed straight to Cloudinary —
+// nothing touches local disk, so this works fine on ephemeral hosts too.
+const storage = multer.memoryStorage();
 
 const allowedTypes = [".pdf", ".doc", ".docx"];
 
 function fileFilter(req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedTypes.includes(ext)) return cb(null, true);
-  cb(new Error("Only PDF and Word documents are allowed for resumes"));
+
+  // A plain Error here isn't a multer.MulterError, so errorHandler.js's
+  // dedicated multer branch won't catch it — without `.status`, it used to
+  // fall through to the generic 500 "internal server error" and the real
+  // reason ("wrong file type") never reached the user. Setting `.status`
+  // routes it through the normal err.status branch instead, with the
+  // actual message intact.
+  const err = new Error("Only PDF and Word documents are allowed for resumes");
+  err.status = 400;
+  cb(err);
 }
 
 const upload = multer({

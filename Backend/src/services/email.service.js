@@ -1,26 +1,69 @@
-const resend = require("../config/email");
+const { apiKey } = require("../config/email");
 
-const FROM_EMAIL = process.env.REMINDER_FROM_EMAIL || "InternTrack <onboarding@resend.dev>";
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+// Must be the exact address you verified as a "Sender" in Brevo's dashboard
+// (Settings > Senders) — Brevo rejects sends from an unverified address,
+// same idea as Resend's domain requirement but for one email instead of a
+// whole domain.
+const SENDER_EMAIL = process.env.REMINDER_FROM_EMAIL || "";
+const SENDER_NAME = process.env.REMINDER_FROM_NAME || "InternTrack";
 
-// Fully optional. If RESEND_API_KEY isn't set, this just logs and returns —
-// it never throws, so a missing key can't break reminder creation or the
-// background checker.
+// `title` and `notes` are free-text fields a user typed into the reminder
+// form — they go straight into an HTML email below, so without escaping,
+// something like `<img src=x onerror=alert(1)>` as a note would execute as
+// real markup for whoever reads the email. This turns it back into inert
+// text before it's ever interpolated into the template.
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Fully optional. If BREVO_API_KEY (or the sender address) isn't set, this
+// just logs and returns — it never throws, so a missing key can't break
+// reminder creation or the background checker.
 async function sendReminderEmail({ to, title, remindAt, notes }) {
-  if (!resend) {
-    console.warn(`[email skipped, no RESEND_API_KEY] Would have reminded ${to} about "${title}"`);
+  if (!apiKey) {
+    console.warn(`[email skipped, no BREVO_API_KEY] Would have reminded ${to} about "${title}"`);
+    return { skipped: true };
+  }
+  if (!SENDER_EMAIL) {
+    console.warn("[email skipped, no REMINDER_FROM_EMAIL] Brevo needs a verified sender address.");
     return { skipped: true };
   }
 
+  const safeTitle = escapeHtml(title);
+  const safeNotes = notes ? escapeHtml(notes) : "";
+
   try {
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      subject: `Reminder: ${title}`,
-      html: `<p>This is a reminder for <strong>${title}</strong>, scheduled for ${new Date(
-        remindAt
-      ).toLocaleString()}.</p>${notes ? `<p>${notes}</p>` : ""}`,
+    const response = await fetch(BREVO_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+        to: [{ email: to }],
+        subject: `Reminder: ${title}`,
+        htmlContent: `<p>This is a reminder for <strong>${safeTitle}</strong>, scheduled for ${new Date(
+          remindAt
+        ).toLocaleString()}.</p>${safeNotes ? `<p>${safeNotes}</p>` : ""}`,
+      }),
     });
-    return result;
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error("Failed to send reminder email:", result.message || response.statusText);
+      return { error: result.message || response.statusText };
+    }
+
+    return result; // { messageId: "..." }
   } catch (err) {
     console.error("Failed to send reminder email:", err.message);
     return { error: err.message };

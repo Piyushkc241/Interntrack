@@ -1,19 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api from "../services/api";
 import Navbar from "../components/Navbar";
 
 export default function Resumes() {
   const [resumes, setResumes] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
   const [label, setLabel] = useState("");
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  function fetchResumes() {
-    api.get("/resumes").then(({ data }) => setResumes(data)).catch(() => setError("Could not load resumes."));
-  }
+  const fetchResumes = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/resumes", { params: { page, limit: 8 } });
+      setResumes(data.data);
+      setPagination(data.pagination);
+    } catch (err) {
+      setError("Could not load resumes.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(fetchResumes, []);
+  useEffect(() => {
+    fetchResumes(1);
+  }, [fetchResumes]);
 
   async function handleUpload(e) {
     e.preventDefault();
@@ -28,7 +41,9 @@ export default function Resumes() {
       setLabel("");
       setFile(null);
       e.target.reset();
-      fetchResumes();
+      // A new upload should be visible right away — jump back to page 1
+      // rather than staying on whatever page was being viewed.
+      fetchResumes(1);
     } catch (err) {
       setError(err.response?.data?.message || "Upload failed.");
     } finally {
@@ -39,7 +54,7 @@ export default function Resumes() {
   async function handleDelete(resume) {
     if (!window.confirm(`Delete "${resume.label}"?`)) return;
     await api.delete(`/resumes/${resume.id}`);
-    fetchResumes();
+    fetchResumes(pagination.page);
   }
 
   function handleDownload(resume) {
@@ -94,30 +109,56 @@ export default function Resumes() {
         {error && <p className="mt-4 text-sm text-status-rejected">{error}</p>}
 
         <div className="mt-6 space-y-3">
-          {resumes.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">
-              No resumes uploaded yet.
-            </div>
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : (
+            <>
+              {resumes.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">
+                  No resumes uploaded yet.
+                </div>
+              )}
+              {resumes.map((resume) => (
+                <div key={resume.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="font-medium text-ink">{resume.label}</p>
+                    <p className="text-sm text-slate-500">
+                      {resume.original_name} · Uploaded {new Date(resume.uploaded_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => handleDownload(resume)} className="text-sm font-medium text-brand-600 hover:text-brand-700">
+                      Download
+                    </button>
+                    <button onClick={() => handleDelete(resume)} className="text-sm font-medium text-status-rejected hover:opacity-80">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
           )}
-          {resumes.map((resume) => (
-            <div key={resume.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div>
-                <p className="font-medium text-ink">{resume.label}</p>
-                <p className="text-sm text-slate-500">
-                  {resume.original_name} · Uploaded {new Date(resume.uploaded_at).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => handleDownload(resume)} className="text-sm font-medium text-brand-600 hover:text-brand-700">
-                  Download
-                </button>
-                <button onClick={() => handleDelete(resume)} className="text-sm font-medium text-status-rejected hover:opacity-80">
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
+
+        {pagination.totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              disabled={pagination.page <= 1}
+              onClick={() => fetchResumes(pagination.page - 1)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-slate-500">Page {pagination.page} of {pagination.totalPages}</span>
+            <button
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => fetchResumes(pagination.page + 1)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

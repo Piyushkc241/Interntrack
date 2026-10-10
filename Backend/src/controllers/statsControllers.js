@@ -1,13 +1,9 @@
 const statsService = require("../services/stats.service");
+const asyncHandler = require("../utils/asyncHandler");
 
-const getOverview = async (req, res) => {
-  try {
-    const stats = await statsService.getOverview(req.userId);
-    res.status(200).json(stats);
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "internal server error" });
-  }
-};
+const getOverview = asyncHandler(async (req, res) => {
+  const stats = await statsService.getOverview(req.userId);
+  res.status(200).json(stats);
+});
 
 module.exports = { getOverview };
