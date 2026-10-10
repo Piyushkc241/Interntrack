@@ -1,9 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000",
-  // The auth token now lives in an httpOnly cookie set by the backend, so
-  // every request needs to carry cookies instead of an Authorization header.
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? "/api" : "http://localhost:5000"),
   withCredentials: true,
 });
 
